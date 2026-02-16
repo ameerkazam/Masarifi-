@@ -251,9 +251,77 @@
         .heatmap-day { width: 25px; height: 25px; border-radius: 4px; border: 1px solid var(--border); font-size: 8px; display: flex; align-items: center; justify-content: center; }
         .day-active { background: var(--s); color: white; }
         .day-inactive { background: var(--inp-bg); opacity: 0.3; }
-    </style>
+    
+        .cloud-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            border: 1px solid var(--border);
+            background: var(--inp-bg);
+        }
+        .cloud-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        .cloud-online { background: #10b981; }
+        .cloud-offline { background: #ef4444; }
+        .cloud-syncing { background: #f59e0b; animation: pulseSync 1s infinite; }
+        @keyframes pulseSync {
+            0% { opacity: 1; }
+            50% { opacity: 0.4; }
+            100% { opacity: 1; }
+        }
+
+</style>
+
+<!-- Firebase Core -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyACqH6y-0Ax5k9sHf7jwSdunOS6Hbomcp8",
+  authDomain: "timecount-8ab50.firebaseapp.com",
+  projectId: "timecount-8ab50",
+  storageBucket: "timecount-8ab50.firebasestorage.app",
+  messagingSenderId: "386659361532",
+  appId: "1:386659361532:web:08ec0e252478f26ac1ed79",
+  measurementId: "G-SVFRE5X72Y"
+};
+firebase.initializeApp(firebaseConfig);
+const firestoreDB = firebase.firestore();
+</script>
+
 </head>
-<body onload="initApp()">
+<body>
+
+<div id="loginScreen" style="
+position:fixed;inset:0;
+background:linear-gradient(135deg,#1e293b,#0f172a);
+display:flex;align-items:center;justify-content:center;
+z-index:99999;">
+  <div style="background:#1e293b;padding:40px;border-radius:20px;
+  width:100%;max-width:380px;text-align:center;
+  box-shadow:0 20px 40px rgba(0,0,0,.4);">
+    <h2 style="margin-bottom:20px;">تسجيل الدخول</h2>
+    <input type="email" id="authEmail" placeholder="البريد الإلكتروني"
+      style="width:100%;padding:12px;margin:8px 0;border-radius:10px;border:none;background:#0f172a;color:#fff;">
+    <input type="password" id="authPass" placeholder="كلمة المرور"
+      style="width:100%;padding:12px;margin:8px 0;border-radius:10px;border:none;background:#0f172a;color:#fff;">
+    <button onclick="loginUser()" style="width:100%;padding:12px;margin-top:10px;border:none;border-radius:12px;background:#3b82f6;color:#fff;font-weight:bold;cursor:pointer">
+      دخول
+    </button>
+    <button onclick="registerUser()" style="width:100%;padding:12px;margin-top:10px;border:none;border-radius:12px;background:#10b981;color:#fff;font-weight:bold;cursor:pointer">
+      إنشاء حساب
+    </button>
+  </div>
+</div>
+
 
     <div id="receiptTemplate">
         <div class="receipt-header">
@@ -284,7 +352,17 @@
             <button class="icon-btn" onclick="backToSelection()" id="navHomeBtn" style="display:none; border-color: var(--s);">🏠</button>
         </div>
         <div class="taskbar-group">
+
+        <div class="cloud-status" id="cloudStatus">
+            <div class="cloud-dot cloud-offline" id="cloudDot"></div>
+            <span id="cloudText">غير متصل</span>
+        </div>
+
             <button class="icon-btn" onclick="rotateTheme()" id="themeIcon">🌙</button>
+<button onclick="logoutUser()" class="icon-btn" style="border-color:#ef4444">
+🚪
+</button>
+
             <button class="icon-btn" onclick="checkPin()" style="border-right: 3px solid var(--p);">⚙️</button>
         </div>
     </div>
@@ -649,7 +727,44 @@
     </div>
 
 <script>
-    const STORAGE_ID = "HR_FINAL_MASTER_STORAGE_2026_V2";
+    
+// 🔥 Firebase Sync Layer (No feature removed)
+const originalSetItem = localStorage.setItem;
+const originalGetItem = localStorage.getItem;
+
+async function loadFromFirebase() {
+    try {
+        const snapshot = await firestoreDB.collection("appData").get();
+        snapshot.forEach(doc => {
+            originalSetItem.call(localStorage, doc.id, doc.data().value);
+        });
+        console.log("🔥 Synced from Firebase");
+    } catch (e) {
+        console.log("Firebase Load Error:", e);
+    }
+}
+
+localStorage.setItem = async function(key, value) {
+    originalSetItem.call(localStorage, key, value);
+    try {
+        await firestoreDB.collection("appData").doc(key).set({
+            value: value,
+            updatedAt: new Date()
+        });
+    } catch (e) {
+        console.log("Firebase Save Error:", e);
+    }
+};
+
+localStorage.getItem = function(key) {
+    return originalGetItem.call(localStorage, key);
+};
+
+window.addEventListener("load", async () => {
+    await loadFromFirebase();
+});
+
+const STORAGE_ID = "HR_FINAL_MASTER_STORAGE_2026_V2";
     let db = JSON.parse(localStorage.getItem(STORAGE_ID)) || { emps: {}, config: { name: "نظام الموظفين", logo: null, pin: "1234", theme: "dark", workStartTime: "08:00", latePenalty: 0, incentiveAmount: 0, announcement: null } };
     let curId = null; let timer = null; let lastSettleMsg = "";
     let editingEmpId = null; 
@@ -1135,5 +1250,136 @@
     function exportToExcel() { const e = db.emps[curId]; let rows = [["التاريخ", "المدة", "النوع"]]; if(e.logs) e.logs.forEach(l => { if(!l.isPaid) rows.push([l.d, l.m, l.type]); }); const ws = XLSX.utils.aoa_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Data"); XLSX.writeFile(wb, `${e.name}.xlsx`); }
     function readExcel(inp) { let r = new FileReader(); r.onload = e => { let rs = XLSX.utils.sheet_to_json(XLSX.read(new Uint8Array(e.target.result), {type:'array'}).Sheets[XLSX.read(new Uint8Array(e.target.result), {type:'array'}).SheetNames[0]]); rs.forEach(row => { let inT, outT; for(let k in row) { if(k.includes("دخول")) inT = row[k]; if(k.includes("خروج")) outT = row[k]; } if(inT && outT) { let diff = (new Date("2026/01/01 "+outT) - new Date("2026/01/01 "+inT)) / 60000; if(diff>0) { if(!db.emps[curId].logs) db.emps[curId].logs = []; db.emps[curId].logs.unshift({ m:diff, d:new Date().toLocaleDateString('ar-EG'), type:'إكسل', isPaid: false }); } } }); saveDB(); drawLogs(); showToast("تم الاستيراد", "s"); }; r.readAsArrayBuffer(inp.files[0]); }
 </script>
+
+<script>
+function updateCloudStatus(state) {
+    const dot = document.getElementById("cloudDot");
+    const text = document.getElementById("cloudText");
+
+    dot.classList.remove("cloud-online", "cloud-offline", "cloud-syncing");
+
+    if (state === "online") {
+        dot.classList.add("cloud-online");
+        text.textContent = "متصل بالسحابة";
+    } else if (state === "syncing") {
+        dot.classList.add("cloud-syncing");
+        text.textContent = "جاري الرفع...";
+    } else {
+        dot.classList.add("cloud-offline");
+        text.textContent = "غير متصل";
+    }
+}
+
+window.addEventListener("online", () => updateCloudStatus("online"));
+window.addEventListener("offline", () => updateCloudStatus("offline"));
+
+firebase.firestore().enableNetwork().then(() => {
+    updateCloudStatus("online");
+}).catch(() => {
+    updateCloudStatus("offline");
+});
+
+// مراقبة أي كتابة للبيانات لعرض حالة الرفع
+const originalSet = firebase.firestore.DocumentReference.prototype.set;
+firebase.firestore.DocumentReference.prototype.set = function() {
+    updateCloudStatus("syncing");
+    return originalSet.apply(this, arguments).then(res => {
+        updateCloudStatus("online");
+        return res;
+    });
+};
+
+
+// 🔐 Firebase Authentication with Roles
+const auth = firebase.auth();
+
+async function registerUser(){
+  const email = document.getElementById("authEmail").value;
+  const pass = document.getElementById("authPass").value;
+
+  const currentUser = auth.currentUser;
+  if(!currentUser){
+    alert("فقط المدير يمكنه إنشاء حسابات");
+    return;
+  }
+
+  const adminDoc = await firestoreDB.collection("users").doc(currentUser.uid).get();
+  if(!adminDoc.exists || adminDoc.data().role !== "admin"){
+    alert("ليس لديك صلاحية إنشاء حسابات");
+    return;
+  }
+
+  auth.createUserWithEmailAndPassword(email, pass)
+  .then(async (cred)=>{
+      await firestoreDB.collection("users").doc(cred.user.uid).set({
+          role: "employee",
+          createdAt: new Date()
+      });
+      alert("تم إنشاء حساب الموظف بنجاح");
+  })
+  .catch(e=>alert(e.message));
+}
+
+function logoutUser(){
+  auth.signOut().then(()=>{
+    document.getElementById("loginScreen").style.display="flex";
+  });
+}
+
+auth.onAuthStateChanged(async user=>{
+  if(user){
+      const doc = await firestoreDB.collection("users").doc(user.uid).get();
+
+      if(!doc.exists){
+        // أول مستخدم يصبح مدير تلقائياً
+        await firestoreDB.collection("users").doc(user.uid).set({
+          role:"admin",
+          createdAt:new Date()
+        });
+      }
+
+      document.getElementById("loginScreen").style.display="none";
+      initApp();
+  }else{
+      document.getElementById("loginScreen").style.display="flex";
+  }
+});
+
+const auth = firebase.auth();
+
+function registerUser(){
+  const email = document.getElementById("authEmail").value;
+  const pass = document.getElementById("authPass").value;
+
+  auth.createUserWithEmailAndPassword(email, pass)
+  .then(async (cred)=>{
+      await firestoreDB.collection("users").doc(cred.user.uid).set({
+          role: "employee",
+          createdAt: new Date()
+      });
+      alert("تم إنشاء الحساب بنجاح");
+  })
+  .catch(e=>alert(e.message));
+}
+
+function loginUser(){
+  const email = document.getElementById("authEmail").value;
+  const pass = document.getElementById("authPass").value;
+
+  auth.signInWithEmailAndPassword(email, pass)
+  .catch(e=>alert(e.message));
+}
+
+auth.onAuthStateChanged(user=>{
+  if(user){
+      document.getElementById("loginScreen").style.display="none";
+      initApp(); // تشغيل النظام الكامل بعد تسجيل الدخول
+  }else{
+      document.getElementById("loginScreen").style.display="flex";
+  }
+});
+
+</script>
+
 </body>
 </html>
